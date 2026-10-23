@@ -9,6 +9,7 @@ export interface CreateBuyerInput {
   defaultRate?: number | null;
   defaultSession?: 'morning' | 'evening' | 'both';
   autoAssign?: boolean;
+  startDate?: string | null;
 }
 
 export interface UpdateBuyerInput {
@@ -19,12 +20,13 @@ export interface UpdateBuyerInput {
   defaultRate?: number | null;
   defaultSession?: 'morning' | 'evening' | 'both';
   autoAssign?: boolean;
+  startDate?: string | null;
 }
 
 export class BuyersService {
   /**
    * Automatically advances daily milk dispatches for all active monthly buyers
-   * from their creation date up to today.
+   * from their delivery start date up to today.
    */
   async autoAssignMonthlyDispatches() {
     return await db.transaction(async (tx) => {
@@ -37,6 +39,7 @@ export class BuyersService {
           COALESCE(default_liters, 0)::numeric(10,2) as "defaultLiters",
           COALESCE(default_rate, 85.00)::numeric(12,2) as "defaultRate",
           COALESCE(default_session, 'morning') as "defaultSession",
+          COALESCE(start_date, created_at::date) as "startDate",
           created_at::date as "createdDate"
         FROM buyers
         WHERE COALESCE(buyer_type, 'monthly') = 'monthly' 
@@ -55,13 +58,20 @@ export class BuyersService {
         const buyerId = Number(buyer.id);
         const sessionChoice = buyer.defaultSession || 'morning';
 
-        const createdDateStr = buyer.createdDate ? String(buyer.createdDate).split('T')[0] : todayStr;
+        const effectiveStartStr = buyer.startDate
+          ? String(buyer.startDate).split('T')[0]
+          : (buyer.createdDate ? String(buyer.createdDate).split('T')[0] : todayStr);
+
+        // If start date is in the future, don't generate dispatches before delivery starts!
+        if (effectiveStartStr > todayStr) {
+          continue;
+        }
 
         // Generate date series up to current date
         const datesResult = await tx.execute(sql`
           SELECT d::date as "dateStr"
           FROM generate_series(
-            GREATEST(${createdDateStr}::date, CURRENT_DATE - INTERVAL '30 days'),
+            GREATEST(${effectiveStartStr}::date, CURRENT_DATE - INTERVAL '60 days'),
             CURRENT_DATE,
             '1 day'::interval
           ) d
@@ -123,6 +133,7 @@ export class BuyersService {
         COALESCE(b.default_rate, 85.00)::numeric(12,2) as "defaultRate",
         COALESCE(b.default_session, 'morning') as "defaultSession",
         COALESCE(b.auto_assign, true) as "autoAssign",
+        COALESCE(b.start_date, b.created_at::date) as "startDate",
         b.created_at as "createdAt",
         COALESCE(sales.total_billed, 0)::numeric(12,2) as "totalBilled",
         COALESCE(sales.total_liters, 0)::numeric(10,2) as "totalLiters",
@@ -167,6 +178,7 @@ export class BuyersService {
       defaultRate: parseFloat(row.defaultRate || '85'),
       defaultSession: (row.defaultSession || 'morning') as 'morning' | 'evening' | 'both',
       autoAssign: Boolean(row.autoAssign),
+      startDate: row.startDate ? String(row.startDate).split('T')[0] : null,
       createdAt: row.createdAt,
       totalBilled: parseFloat(row.totalBilled || '0'),
       totalLiters: parseFloat(row.totalLiters || '0'),
@@ -189,6 +201,7 @@ export class BuyersService {
         COALESCE(b.default_rate, 85.00)::numeric(12,2) as "defaultRate",
         COALESCE(b.default_session, 'morning') as "defaultSession",
         COALESCE(b.auto_assign, true) as "autoAssign",
+        COALESCE(b.start_date, b.created_at::date) as "startDate",
         b.created_at as "createdAt",
         COALESCE(sales.total_billed, 0)::numeric(12,2) as "totalBilled",
         COALESCE(sales.total_liters, 0)::numeric(10,2) as "totalLiters",
@@ -246,6 +259,7 @@ export class BuyersService {
       defaultRate: parseFloat(buyer.defaultRate || '85'),
       defaultSession: (buyer.defaultSession || 'morning') as 'morning' | 'evening' | 'both',
       autoAssign: Boolean(buyer.autoAssign),
+      startDate: buyer.startDate ? String(buyer.startDate).split('T')[0] : null,
       createdAt: buyer.createdAt,
       totalBilled: parseFloat(buyer.totalBilled || '0'),
       totalLiters: parseFloat(buyer.totalLiters || '0'),
@@ -263,6 +277,7 @@ export class BuyersService {
     const defaultRate = data.defaultRate !== undefined && data.defaultRate !== null ? String(data.defaultRate) : '85.00';
     const defaultSession = data.defaultSession || 'morning';
     const autoAssign = data.autoAssign !== undefined ? data.autoAssign : true;
+    const startDate = data.startDate || new Date().toISOString().split('T')[0];
 
     const [newBuyer] = await db
       .insert(buyers)
@@ -274,6 +289,7 @@ export class BuyersService {
         defaultRate,
         defaultSession,
         autoAssign,
+        startDate,
       })
       .returning();
 
@@ -293,6 +309,7 @@ export class BuyersService {
       defaultRate: parseFloat(newBuyer.defaultRate || '85'),
       defaultSession: (newBuyer.defaultSession || 'morning') as 'morning' | 'evening' | 'both',
       autoAssign: Boolean(newBuyer.autoAssign),
+      startDate: newBuyer.startDate ? String(newBuyer.startDate).split('T')[0] : startDate,
     };
   }
 
@@ -309,6 +326,7 @@ export class BuyersService {
     }
     if (data.defaultSession !== undefined) updateValues.defaultSession = data.defaultSession;
     if (data.autoAssign !== undefined) updateValues.autoAssign = data.autoAssign;
+    if (data.startDate !== undefined) updateValues.startDate = data.startDate;
 
     const [updated] = await db
       .update(buyers)
@@ -331,6 +349,7 @@ export class BuyersService {
       defaultRate: parseFloat(updated.defaultRate || '85'),
       defaultSession: (updated.defaultSession || 'morning') as 'morning' | 'evening' | 'both',
       autoAssign: Boolean(updated.autoAssign),
+      startDate: updated.startDate ? String(updated.startDate).split('T')[0] : null,
     };
   }
 

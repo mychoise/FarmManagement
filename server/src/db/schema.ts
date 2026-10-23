@@ -33,6 +33,7 @@ export const buyers = pgTable('buyers', {
   defaultRate: numeric('default_rate', { precision: 12, scale: 2 }).default('85.00').notNull(),
   defaultSession: varchar('default_session', { length: 20 }).default('morning').notNull(),
   autoAssign: boolean('auto_assign').default(true).notNull(),
+  startDate: date('start_date'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

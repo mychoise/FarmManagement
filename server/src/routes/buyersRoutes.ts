@@ -7,22 +7,42 @@ const router = Router();
 
 const createBuyerSchema = z.object({
   name: z.string().min(1, 'Buyer name is required'),
-  phone: z.string().optional().nullable(),
+  phone: z
+    .string()
+    .refine((val) => {
+      if (!val || val.trim().length === 0) return true;
+      const digits = val.replace(/\D/g, '');
+      const nat = digits.startsWith('977') && digits.length === 13 ? digits.slice(3) : digits;
+      return nat.length === 10;
+    }, 'Phone number must be exactly 10 digits')
+    .optional()
+    .nullable(),
   buyerType: z.enum(['monthly', 'one_time']).optional().default('monthly'),
   defaultLiters: z.number().min(0).optional().nullable(),
   defaultRate: z.number().positive().optional().nullable(),
   defaultSession: z.enum(['morning', 'evening', 'both']).optional().default('morning'),
   autoAssign: z.boolean().optional().default(true),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be formatted as YYYY-MM-DD').optional().nullable(),
 });
 
 const updateBuyerSchema = z.object({
   name: z.string().min(1).optional(),
-  phone: z.string().optional().nullable(),
+  phone: z
+    .string()
+    .refine((val) => {
+      if (!val || val.trim().length === 0) return true;
+      const digits = val.replace(/\D/g, '');
+      const nat = digits.startsWith('977') && digits.length === 13 ? digits.slice(3) : digits;
+      return nat.length === 10;
+    }, 'Phone number must be exactly 10 digits')
+    .optional()
+    .nullable(),
   buyerType: z.enum(['monthly', 'one_time']).optional(),
   defaultLiters: z.number().min(0).optional().nullable(),
   defaultRate: z.number().positive().optional().nullable(),
   defaultSession: z.enum(['morning', 'evening', 'both']).optional(),
   autoAssign: z.boolean().optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be formatted as YYYY-MM-DD').optional().nullable(),
 });
 
 const recordDispatchSchema = z.object({
