@@ -23,13 +23,17 @@ export class ReportsController {
       const endDate = req.query.endDate as string | undefined;
       const label = req.query.label as string | undefined;
 
-      if (!startDate && (!month || !/^\d{4}-\d{2}$/.test(month))) {
+      const effectiveMonth =
+        month ||
+        (startDate ? startDate.slice(0, 7) : new Date().toISOString().slice(0, 7));
+
+      if (!startDate && (!effectiveMonth || !/^\d{4}-\d{2}$/.test(effectiveMonth))) {
         return res.status(400).json({
           error: 'Query parameter "month" (YYYY-MM) or "startDate" & "endDate" (YYYY-MM-DD) required',
         });
       }
 
-      const report = await reportsService.getMonthlyReport(month || '', startDate, endDate, label);
+      const report = await reportsService.getMonthlyReport(effectiveMonth, startDate, endDate, label);
       res.json(report);
     } catch (err) {
       next(err);
