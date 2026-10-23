@@ -18,12 +18,18 @@ export class ReportsController {
 
   async getMonthly(req: Request, res: Response, next: NextFunction) {
     try {
-      const month = req.query.month as string;
-      if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-        return res.status(400).json({ error: 'Query parameter "month" must be formatted as YYYY-MM' });
+      const month = req.query.month as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const label = req.query.label as string | undefined;
+
+      if (!startDate && (!month || !/^\d{4}-\d{2}$/.test(month))) {
+        return res.status(400).json({
+          error: 'Query parameter "month" (YYYY-MM) or "startDate" & "endDate" (YYYY-MM-DD) required',
+        });
       }
 
-      const report = await reportsService.getMonthlyReport(month);
+      const report = await reportsService.getMonthlyReport(month || '', startDate, endDate, label);
       res.json(report);
     } catch (err) {
       next(err);

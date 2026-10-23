@@ -6,6 +6,8 @@ export interface CreatePaymentInput {
   buyerId: number;
   amount: number;
   paymentDate: string;
+  paymentMethod?: 'cash' | 'online' | 'bank' | string;
+  reference?: string | null;
   note?: string | null;
 }
 
@@ -30,6 +32,8 @@ export class PaymentsService {
           buyerId: input.buyerId,
           amount: input.amount.toFixed(2),
           paymentDate: input.paymentDate,
+          paymentMethod: input.paymentMethod || 'cash',
+          reference: input.reference || null,
           note: input.note || null,
         })
         .returning();

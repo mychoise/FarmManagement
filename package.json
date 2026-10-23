@@ -1,0 +1,15 @@
+{
+  "name": "green-pasture-app",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm run build --prefix server",
+    "start": "npm run start --prefix server",
+    "dev": "npm run dev --prefix server",
+    "db:push": "npm run db:push --prefix server",
+    "db:seed": "npm run db:seed --prefix server"
+  },
+  "dependencies": {
+    "@neon/config": "^1.9.3",
+    "@neon/env": "^1.6.4"
+  }
+}

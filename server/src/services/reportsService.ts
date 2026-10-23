@@ -150,14 +150,29 @@ export class ReportsService {
     };
   }
 
-  async getMonthlyReport(monthStr: string) {
-    const rangeResult = await db.execute(sql`
-      SELECT 
-        TO_DATE(${monthStr} || '-01', 'YYYY-MM-DD')::date as "startDate",
-        (DATE_TRUNC('month', TO_DATE(${monthStr} || '-01', 'YYYY-MM-DD')) + INTERVAL '1 month - 1 day')::date as "endDate"
-    `);
+  async getMonthlyReport(
+    monthStr?: string,
+    customStartDate?: string,
+    customEndDate?: string,
+    customLabel?: string
+  ) {
+    let startDate: string;
+    let endDate: string;
 
-    const { startDate, endDate } = rangeResult.rows[0] as any;
+    if (customStartDate && customEndDate) {
+      startDate = customStartDate;
+      endDate = customEndDate;
+    } else {
+      const rangeResult = await db.execute(sql`
+        SELECT 
+          TO_DATE(${monthStr} || '-01', 'YYYY-MM-DD')::date as "startDate",
+          (DATE_TRUNC('month', TO_DATE(${monthStr} || '-01', 'YYYY-MM-DD')) + INTERVAL '1 month - 1 day')::date as "endDate"
+      `);
+
+      const r = rangeResult.rows[0] as any;
+      startDate = String(r.startDate);
+      endDate = String(r.endDate);
+    }
 
     // 1. Overall Totals in SQL
     const overallResult = await db.execute(sql`
@@ -304,7 +319,7 @@ export class ReportsService {
 
     return {
       period: 'monthly',
-      month: monthStr,
+      month: customLabel || monthStr || `${startDate} to ${endDate}`,
       startDate,
       endDate,
       totalIncome,

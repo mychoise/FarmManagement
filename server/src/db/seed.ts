@@ -13,11 +13,56 @@ async function seed() {
   const insertedBuyers = await db
     .insert(buyers)
     .values([
-      { name: 'Milan Dairy Cooperative', phone: '+977 9841234567' },
-      { name: 'Annapurna Sweets', phone: '+977 9851098765' },
-      { name: 'Hotel Himal View', phone: '+977 9803456789' },
-      { name: 'Sita Sharma', phone: '+977 9812345678' },
-      { name: 'Ramesh Bhandari', phone: '+977 9865432109' },
+      {
+        name: 'Milan Dairy Cooperative',
+        phone: '+977 9841234567',
+        buyerType: 'monthly',
+        defaultLiters: '25.00',
+        defaultRate: '85.00',
+        defaultSession: 'morning',
+        autoAssign: true,
+        startDate: '2026-10-06',
+      },
+      {
+        name: 'Annapurna Sweets',
+        phone: '+977 9851098765',
+        buyerType: 'monthly',
+        defaultLiters: '15.00',
+        defaultRate: '85.00',
+        defaultSession: 'morning',
+        autoAssign: true,
+        startDate: '2026-10-06',
+      },
+      {
+        name: 'Hotel Himal View',
+        phone: '+977 9803456789',
+        buyerType: 'monthly',
+        defaultLiters: '10.00',
+        defaultRate: '85.00',
+        defaultSession: 'evening',
+        autoAssign: true,
+        startDate: '2026-10-06',
+      },
+      {
+        name: 'Sita Sharma',
+        phone: '+977 9812345678',
+        buyerType: 'monthly',
+        defaultLiters: '3.00',
+        defaultRate: '85.00',
+        defaultSession: 'morning',
+        autoAssign: true,
+        startDate: '2026-10-06',
+      },
+      {
+        name: 'Ramesh Bhandari',
+        phone: '+977 9865432109',
+        buyerType: 'monthly',
+        defaultLiters: '2.00',
+        defaultRate: '85.00',
+        defaultSession: 'evening',
+        autoAssign: true,
+        startDate: '2026-10-06',
+      },
     ])
     .returning();
 

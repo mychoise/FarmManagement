@@ -97,6 +97,8 @@ export const payments = pgTable(
     buyerId: integer('buyer_id').references(() => buyers.id, { onDelete: 'cascade' }).notNull(),
     amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
     paymentDate: date('payment_date').notNull(),
+    paymentMethod: varchar('payment_method', { length: 50 }).default('cash').notNull(),
+    reference: varchar('reference', { length: 255 }),
     note: text('note'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },

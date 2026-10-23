@@ -1,9 +1,17 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
+import { buyersService } from './buyersService.js';
 
 export class DashboardService {
   async getTodayDashboard(targetDate?: string) {
     const today = targetDate || new Date().toISOString().slice(0, 10);
+
+    // Automatically advance daily milk dispatches for all active monthly buyers
+    try {
+      await buyersService.autoAssignMonthlyDispatches(today);
+    } catch (err) {
+      console.error('Error auto-assigning monthly dispatches in dashboard:', err);
+    }
 
     // 1. Query today's milk sales in SQL
     const salesResult = await db.execute(sql`

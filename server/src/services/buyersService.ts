@@ -28,89 +28,84 @@ export class BuyersService {
    * Automatically advances daily milk dispatches for all active monthly buyers
    * from their delivery start date up to today.
    */
-  async autoAssignMonthlyDispatches() {
+  async autoAssignMonthlyDispatches(targetDate?: string) {
     return await db.transaction(async (tx) => {
-      // Find all active monthly buyers with defaultLiters > 0
-      const activeMonthly = await tx.execute(sql`
-        SELECT 
-          id, 
-          name, 
-          COALESCE(buyer_type, 'monthly') as "buyerType",
-          COALESCE(default_liters, 0)::numeric(10,2) as "defaultLiters",
-          COALESCE(default_rate, 85.00)::numeric(12,2) as "defaultRate",
-          COALESCE(default_session, 'morning') as "defaultSession",
-          COALESCE(start_date, created_at::date) as "startDate",
-          created_at::date as "createdDate"
-        FROM buyers
-        WHERE COALESCE(buyer_type, 'monthly') = 'monthly' 
-          AND COALESCE(auto_assign, true) = true 
-          AND COALESCE(default_liters, 0) > 0
+      const todayStr = targetDate || new Date().toISOString().split('T')[0];
+
+      // 1. Ensure daily_entries exists for all dates with active monthly dispatches
+      await tx.execute(sql`
+        INSERT INTO daily_entries (entry_date, other_income, savings)
+        SELECT DISTINCT d::date, '0.00', '0.00'
+        FROM buyers b,
+        LATERAL generate_series(
+          GREATEST(COALESCE(b.start_date, b.created_at::date), ${todayStr}::date - INTERVAL '60 days'),
+          ${todayStr}::date,
+          '1 day'::interval
+        ) d
+        WHERE COALESCE(b.buyer_type, 'monthly') = 'monthly'
+          AND COALESCE(b.auto_assign, true) = true
+          AND COALESCE(b.default_liters, 0) > 0
+          AND COALESCE(b.start_date, b.created_at::date) <= ${todayStr}::date
+        ON CONFLICT (entry_date) DO NOTHING
       `);
 
-      if (activeMonthly.rows.length === 0) return { assignedCount: 0 };
+      // 2. Bulk insert missing morning dispatches
+      const morningRes = await tx.execute(sql`
+        INSERT INTO milk_sales (entry_date, session, buyer_id, liters, rate_per_liter, total_amount, paid_amount)
+        SELECT 
+          d::date,
+          'morning'::session_enum,
+          b.id,
+          (CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END)::numeric(10,2),
+          COALESCE(b.default_rate, 85.00)::numeric(12,2),
+          ((CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END) * COALESCE(b.default_rate, 85.00))::numeric(12,2),
+          '0.00'
+        FROM buyers b,
+        LATERAL generate_series(
+          GREATEST(COALESCE(b.start_date, b.created_at::date), ${todayStr}::date - INTERVAL '60 days'),
+          ${todayStr}::date,
+          '1 day'::interval
+        ) d
+        WHERE COALESCE(b.buyer_type, 'monthly') = 'monthly'
+          AND COALESCE(b.auto_assign, true) = true
+          AND COALESCE(b.default_liters, 0) > 0
+          AND COALESCE(b.start_date, b.created_at::date) <= ${todayStr}::date
+          AND (COALESCE(b.default_session, 'morning') IN ('morning', 'both'))
+          AND NOT EXISTS (
+            SELECT 1 FROM milk_sales ms
+            WHERE ms.buyer_id = b.id AND ms.entry_date = d::date AND ms.session = 'morning'
+          )
+      `);
 
-      let assignedCount = 0;
-      const todayStr = new Date().toISOString().split('T')[0];
+      // 3. Bulk insert missing evening dispatches
+      const eveningRes = await tx.execute(sql`
+        INSERT INTO milk_sales (entry_date, session, buyer_id, liters, rate_per_liter, total_amount, paid_amount)
+        SELECT 
+          d::date,
+          'evening'::session_enum,
+          b.id,
+          (CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END)::numeric(10,2),
+          COALESCE(b.default_rate, 85.00)::numeric(12,2),
+          ((CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END) * COALESCE(b.default_rate, 85.00))::numeric(12,2),
+          '0.00'
+        FROM buyers b,
+        LATERAL generate_series(
+          GREATEST(COALESCE(b.start_date, b.created_at::date), ${todayStr}::date - INTERVAL '60 days'),
+          ${todayStr}::date,
+          '1 day'::interval
+        ) d
+        WHERE COALESCE(b.buyer_type, 'monthly') = 'monthly'
+          AND COALESCE(b.auto_assign, true) = true
+          AND COALESCE(b.default_liters, 0) > 0
+          AND COALESCE(b.start_date, b.created_at::date) <= ${todayStr}::date
+          AND (COALESCE(b.default_session, 'morning') IN ('evening', 'both'))
+          AND NOT EXISTS (
+            SELECT 1 FROM milk_sales ms
+            WHERE ms.buyer_id = b.id AND ms.entry_date = d::date AND ms.session = 'evening'
+          )
+      `);
 
-      for (const buyer of activeMonthly.rows as any[]) {
-        const defaultL = parseFloat(buyer.defaultLiters);
-        const defaultR = parseFloat(buyer.defaultRate);
-        const buyerId = Number(buyer.id);
-        const sessionChoice = buyer.defaultSession || 'morning';
-
-        const effectiveStartStr = buyer.startDate
-          ? String(buyer.startDate).split('T')[0]
-          : (buyer.createdDate ? String(buyer.createdDate).split('T')[0] : todayStr);
-
-        // If start date is in the future, don't generate dispatches before delivery starts!
-        if (effectiveStartStr > todayStr) {
-          continue;
-        }
-
-        // Generate date series up to current date
-        const datesResult = await tx.execute(sql`
-          SELECT d::date as "dateStr"
-          FROM generate_series(
-            GREATEST(${effectiveStartStr}::date, CURRENT_DATE - INTERVAL '60 days'),
-            CURRENT_DATE,
-            '1 day'::interval
-          ) d
-        `);
-
-        const datesToCheck = datesResult.rows.map((r: any) => String(r.dateStr).split('T')[0]);
-
-        for (const dateStr of datesToCheck) {
-          // Check if any milk_sales record exists for this buyer on this date
-          const existing = await tx.execute(sql`
-            SELECT id FROM milk_sales 
-            WHERE buyer_id = ${buyerId} AND entry_date = ${dateStr}::date
-            LIMIT 1
-          `);
-
-          if (existing.rows.length === 0) {
-            // Ensure daily_entries row exists
-            await tx.execute(sql`
-              INSERT INTO daily_entries (entry_date, other_income, savings)
-              VALUES (${dateStr}::date, '0.00', '0.00')
-              ON CONFLICT (entry_date) DO NOTHING
-            `);
-
-            const sessionsToApply: ('morning' | 'evening')[] =
-              sessionChoice === 'both' ? ['morning', 'evening'] : [sessionChoice as 'morning' | 'evening'];
-            const lPerSession = sessionChoice === 'both' ? defaultL / 2 : defaultL;
-            const amtPerSession = (lPerSession * defaultR).toFixed(2);
-
-            for (const s of sessionsToApply) {
-              await tx.execute(sql`
-                INSERT INTO milk_sales (entry_date, session, buyer_id, liters, rate_per_liter, total_amount, paid_amount)
-                VALUES (${dateStr}::date, ${s}::session_enum, ${buyerId}, ${lPerSession.toFixed(2)}, ${defaultR.toFixed(2)}, ${amtPerSession}, '0.00')
-              `);
-            }
-            assignedCount++;
-          }
-        }
-      }
-
+      const assignedCount = (morningRes.rowCount || 0) + (eveningRes.rowCount || 0);
       return { assignedCount };
     });
   }
@@ -445,6 +440,8 @@ export class BuyersService {
       entry.payments.push({
         id: pmt.id,
         amount: parseFloat(String(pmt.amount)),
+        paymentMethod: (pmt as any).paymentMethod || 'cash',
+        reference: (pmt as any).reference || null,
         note: pmt.note,
       });
     }
