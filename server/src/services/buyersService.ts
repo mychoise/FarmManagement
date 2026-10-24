@@ -35,7 +35,7 @@ export class BuyersService {
       // 1. Ensure daily_entries exists for all dates with active monthly dispatches
       await tx.execute(sql`
         INSERT INTO daily_entries (entry_date, other_income, savings)
-        SELECT DISTINCT d::date, '0.00', '0.00'
+        SELECT DISTINCT d::date, 0.00::numeric(12,2), 0.00::numeric(12,2)
         FROM buyers b,
         LATERAL generate_series(
           GREATEST(COALESCE(b.start_date, b.created_at::date), ${todayStr}::date - INTERVAL '60 days'),
@@ -59,7 +59,7 @@ export class BuyersService {
           (CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END)::numeric(10,2),
           COALESCE(b.default_rate, 85.00)::numeric(12,2),
           ((CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END) * COALESCE(b.default_rate, 85.00))::numeric(12,2),
-          '0.00'
+          0.00::numeric(12,2)
         FROM buyers b,
         LATERAL generate_series(
           GREATEST(COALESCE(b.start_date, b.created_at::date), ${todayStr}::date - INTERVAL '60 days'),
@@ -87,7 +87,7 @@ export class BuyersService {
           (CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END)::numeric(10,2),
           COALESCE(b.default_rate, 85.00)::numeric(12,2),
           ((CASE WHEN b.default_session = 'both' THEN b.default_liters / 2 ELSE b.default_liters END) * COALESCE(b.default_rate, 85.00))::numeric(12,2),
-          '0.00'
+          0.00::numeric(12,2)
         FROM buyers b,
         LATERAL generate_series(
           GREATEST(COALESCE(b.start_date, b.created_at::date), ${todayStr}::date - INTERVAL '60 days'),
@@ -500,7 +500,7 @@ export class BuyersService {
       // 1. Ensure daily_entries row exists for entryDate
       await tx.execute(sql`
         INSERT INTO daily_entries (entry_date, other_income, savings)
-        VALUES (${data.entryDate}, '0.00', '0.00')
+        VALUES (${data.entryDate}, 0.00::numeric(12,2), 0.00::numeric(12,2))
         ON CONFLICT (entry_date) DO NOTHING
       `);
 
